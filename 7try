@@ -1,0 +1,102 @@
+# SQL script for creating tables and setting up database structure
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fullname VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL
+);
+
+CREATE TABLE status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(50) UNIQUE NOT NULL
+);
+
+CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title VARCHAR(100) NOT NULL,
+    description TEXT,
+    status_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    FOREIGN KEY (status_id) REFERENCES status (id),
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+# Python script (seed.py) for populating the database with random data
+from faker import Faker
+import sqlite3
+
+faker = Faker()
+connection = sqlite3.connect('tasks_management.db')
+cursor = connection.cursor()
+
+# Seed status table
+statuses = [('new',), ('in progress',), ('completed',)]
+cursor.executemany("INSERT INTO status (name) VALUES (?)", statuses)
+
+# Seed users table
+for _ in range(10):
+    cursor.execute(
+        "INSERT INTO users (fullname, email) VALUES (?, ?)",
+        (faker.name(), faker.unique.email())
+    )
+
+# Seed tasks table
+user_ids = [row[0] for row in cursor.execute("SELECT id FROM users").fetchall()]
+status_ids = [row[0] for row in cursor.execute("SELECT id FROM status").fetchall()]
+
+for _ in range(20):
+    cursor.execute(
+        "INSERT INTO tasks (title, description, status_id, user_id) VALUES (?, ?, ?, ?)",
+        (
+            faker.sentence(nb_words=6),
+            faker.text(max_nb_chars=200),
+            faker.random.choice(status_ids),
+            faker.random.choice(user_ids)
+        )
+    )
+
+connection.commit()
+connection.close()
+
+# SQL queries for task management system
+
+# 1. Get all tasks of a specific user
+"SELECT * FROM tasks WHERE user_id = ?"
+
+# 2. Get tasks by a specific status
+"SELECT * FROM tasks WHERE status_id = (SELECT id FROM status WHERE name = ?)"
+
+# 3. Update the status of a specific task
+"UPDATE tasks SET status_id = (SELECT id FROM status WHERE name = ?) WHERE id = ?"
+
+# 4. Get users with no tasks
+"SELECT * FROM users WHERE id NOT IN (SELECT user_id FROM tasks)"
+
+# 5. Add a new task for a specific user
+"INSERT INTO tasks (title, description, status_id, user_id) VALUES (?, ?, ?, ?)"
+
+# 6. Get all tasks that are not completed
+"SELECT * FROM tasks WHERE status_id != (SELECT id FROM status WHERE name = 'completed')"
+
+# 7. Delete a specific task
+"DELETE FROM tasks WHERE id = ?"
+
+# 8. Find users with a specific email pattern
+"SELECT * FROM users WHERE email LIKE ?"
+
+# 9. Update a user's name
+"UPDATE users SET fullname = ? WHERE id = ?"
+
+# 10. Get the count of tasks for each status
+"SELECT status.name, COUNT(tasks.id) FROM tasks INNER JOIN status ON tasks.status_id = status.id GROUP BY status.name"
+
+# 11. Get tasks assigned to users with a specific email domain
+"SELECT tasks.* FROM tasks INNER JOIN users ON tasks.user_id = users.id WHERE users.email LIKE ?"
+
+# 12. Get tasks without a description
+"SELECT * FROM tasks WHERE description IS NULL OR description = ''"
+
+# 13. Get users and their tasks with a status of 'in progress'
+"SELECT users.fullname, tasks.* FROM tasks INNER JOIN users ON tasks.user_id = users.id WHERE tasks.status_id = (SELECT id FROM status WHERE name = 'in progress')"
+
+# 14. Get users and the count of their tasks
+"SELECT users.fullname, COUNT(tasks.id) FROM users LEFT JOIN tasks ON users.id = tasks.user_id GROUP BY users.id"
